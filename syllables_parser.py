@@ -330,6 +330,7 @@ class SyllableParser(object):
                 self.saver.restore(self.session, latest_checkpoint)
             else:
                 print("No checkpoints found, starting training from scratch.")
+            accuracies = []
             for epoch in range(self.num_epochs):
                 print("Starting epoch {}".format(epoch))
                 batch_losses = []
@@ -373,8 +374,10 @@ class SyllableParser(object):
                     pred = pred.reshape((pred.shape[0],
                                          pred.shape[1])).astype(np.int32)
                 print('Validation loss: %f' % np.mean(val_losses))
-                print('Accuracy: %f' % self.accuracy(val_syllable_label_batch,
-                                                     pred, val_lengths_batch))
+                accuracy = self.accuracy(val_syllable_label_batch,
+                                         pred, val_lengths_batch)
+                accuracies.append(accuracy)
+                print('Accuracy: %f' % accuracy)
                 indices = np.random.choice(np.arange(len(val_words_batch)), 3)
                 prediction = self.decode_prediction(val_words_batch[indices],
                                                     pred[indices],
@@ -399,6 +402,7 @@ class SyllableParser(object):
                                                 os.path.join(checkpoints_dir,
                                                              checkpoint_name))
                     print("Saved in " + save_path)
+            return np.mean(accuracies)
 
     def train(self, filename, checkpoints_dir):
         """Train model.
@@ -413,8 +417,8 @@ class SyllableParser(object):
         """
         self.fit_data(filename)
         self.construct_graph()
-        self.run_session(checkpoints_dir)
-        return self.session  # for further sampling
+        mean_val_accuracy = self.run_session(checkpoints_dir)
+        return mean_val_accuracy, self.session  # for further sampling
 
     def sample(self, session, filename, out_file='output.txt'):
         """Sample syllables for each word in file.
