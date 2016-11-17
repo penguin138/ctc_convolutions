@@ -23,7 +23,7 @@ class SyllableParser(object):
             batch_size: A non-negative integer, which represents size of
                 training batch. Defaults to 20.
             hidden_size: A non-negative integer, which represents size of RNN
-                hidden vector. Defalts to 128.
+                hidden vector. Defaults to 128.
             cell_type: A string, which represents type of RNN cell used.
                 Can be either 'lstm' or 'gru'. Defaults to 'lstm'.
             net_type: A string, which represents type of RNN used.
