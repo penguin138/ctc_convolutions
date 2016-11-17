@@ -1,4 +1,5 @@
 #! /usr/bin/env python3
+"""Basic parser for Wiktionary xml dump."""
 from bs4 import BeautifulSoup
 import re
 import sys
@@ -6,6 +7,7 @@ import time
 
 
 def parse_matches(matches):
+    """Format strings with syllables."""
     parsed = []
     for match in matches:
         start_idx = match.find('слоги={{по-слогам|')
@@ -15,6 +17,7 @@ def parse_matches(matches):
 
 
 def parse(filename):
+    """Parse Russian Wiktionary dump."""
     with open(filename) as wiktionary:
         print("Reading xml...")
         start = time.time()
