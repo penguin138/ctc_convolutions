@@ -1,19 +1,22 @@
 #! /usr/bin/env python3
+"""Wiktionary syllables prettifier."""
 import re
 import sys
 import pandas as pd
 
 
 def check_ru(x, axis):
-        alphabet = 'АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ'
-        alphabet = alphabet + alphabet.lower() + 'и́о́а́ы́я́е́у́ю́э́- '
-        for ch in list(x.lower()):
-            if ch not in alphabet:
-                return False
-            return True
+    """Check whether string contains only russian alphabetic characters."""
+    alphabet = 'АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ'
+    alphabet = alphabet + alphabet.lower() + 'и́о́а́ы́я́е́у́ю́э́- '
+    for ch in list(x.lower()):
+        if ch not in alphabet:
+            return False
+        return True
 
 
 def remove_forbidden_chars(str_, axis=0):
+    """Remove forbidden characters from string."""
     forbidden_chars = ('\u0301\u0300\u0340\u0341' +
                        '.!:;,?@#$%^&*œ∑´®†¥¨ˆøπ“‘åß©˙∆˚¬…æ«Ω≈çµ≤≥÷')
     forbidden_chars = forbidden_chars + ''.join(map(str, range(10)))
@@ -21,24 +24,30 @@ def remove_forbidden_chars(str_, axis=0):
 
 
 def normal_syllables(row, axis=1):
-        tokens = re.split(r'\s*?\|\s*?', row[1])
-        vowels = r'[аеёоуиэюяы]'
-        for token in tokens:
-            syllables = re.split('\s+', token)
-            found_vowels = re.findall(vowels, row[0])
-            if len(found_vowels) == len(syllables):
-                return ' '.join(syllables)
-        return None
+    """Keep only normal syllable alignments.
+
+    Remove syllables when their quantity differs from number of vowels in word.
+    """
+    tokens = re.split(r'\s*?\|\s*?', row[1])
+    vowels = r'[аеёоуиэюяы]'
+    for token in tokens:
+        syllables = re.split('\s+', token)
+        found_vowels = re.findall(vowels, row[0])
+        if len(found_vowels) == len(syllables):
+            return ' '.join(syllables)
+    return None
 
 
 def check_lengths(row, axis=1):
-        syllables = re.split('\s+', row[1].strip())
-        if len(row[0]) != len(''.join([s for s in syllables if s != ''])):
-            return False
-        return True
+    """Check if number of letters in syllables equals that number in word."""
+    syllables = re.split('\s+', row[1].strip())
+    if len(row[0]) != len(''.join([s for s in syllables if s != ''])):
+        return False
+    return True
 
 
 def prettify(filename, out_filename="normal_syllables.txt"):
+    """Prettify syllables from Wiktionary."""
     data = pd.read_table(filename, names=['word', 'syllables'])
     data = data.dropna()[data['word'].apply(check_ru, axis=1)]
     data['syllables'] = data['syllables'].apply(remove_forbidden_chars, axis=1)
