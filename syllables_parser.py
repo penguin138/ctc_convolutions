@@ -6,8 +6,8 @@ from time import time
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.ops import rnn_cell
-from tensorflow.nn import bidirectional_dynamic_rnn as brnn
-from tensorflow.nn import dynamic_rnn as rnn
+from tensorflow.python.ops.nn import bidirectional_dynamic_rnn as brnn
+from tensorflow.python.ops.nn import dynamic_rnn as rnn
 
 
 class SyllableParser(object):
