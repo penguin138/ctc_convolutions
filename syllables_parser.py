@@ -6,8 +6,8 @@ from time import time
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.ops import rnn_cell
-from tensorflow.python.ops.nn import bidirectional_dynamic_rnn as brnn
-from tensorflow.python.ops.nn import dynamic_rnn as rnn
+from tensorflow.python.ops.nn import bidirectional_dynamic_rnn as dynamic_brnn
+from tensorflow.python.ops.nn import dynamic_rnn as dynamic_rnn
 
 
 class SyllableParser(object):
@@ -273,14 +273,16 @@ class SyllableParser(object):
                 raise ValueError('Unknown cell type.')
             rnn_multicell = rnn_cell.MultiRNNCell([cell] * self.num_layers)
             if self.net_type == 'rnn':
-                self.outputs, _ = rnn(rnn_multicell, embedding,
-                                      sequence_length=self.seq_lengths,
-                                      dtype=tf.float32, swap_memory=True)
+                self.outputs, _ = dynamic_rnn(rnn_multicell, embedding,
+                                              sequence_length=self.seq_lengths,
+                                              dtype=tf.float32,
+                                              swap_memory=True)
             elif self.net_type == 'brnn':
-                self.outputs, _ = brnn(rnn_multicell, rnn_multicell,
-                                       embedding,
-                                       sequence_length=self.seq_lengths,
-                                       dtype=tf.float32, swap_memory=True)
+                self.outputs, _ = dynamic_brnn(rnn_multicell, rnn_multicell,
+                                               embedding,
+                                               sequence_length=self.seq_lengths,
+                                               dtype=tf.float32,
+                                               swap_memory=True)
                 self.outputs = tf.concat(2, self.outputs)
             # print(self.outputs.get_shape())
             outputs_reshape = tf.reshape(self.outputs, [-1, hidden_state_size])
@@ -302,14 +304,10 @@ class SyllableParser(object):
             # print(self.prediction.get_shape())
             unmasked_ce = tf.nn.sparse_softmax_cross_entropy_with_logits(
                                         self.logits, self.syllable_labels)
-            ce_mask = tf.sequence_mask(self.seq_lengths,
-                                       tf.reduce_max(self.seq_lengths),
-                                       dtype=tf.float32)
-            lengths_mask = tf.sequence_mask(self.seq_lengths,
-                                            tf.reduce_max(self.seq_lengths),
-                                            dtype=tf.float32)
-            self.loss = (tf.reduce_sum(unmasked_ce * ce_mask) /
-                         tf.reduce_sum(lengths_mask))
+            mask = tf.sequence_mask(self.seq_lengths,
+                                    tf.reduce_max(self.seq_lengths),
+                                    dtype=tf.float32)
+            self.loss = tf.reduce_sum(unmasked_ce * mask) / tf.reduce_sum(mask)
             self.optimizer = tf.train.AdamOptimizer().minimize(self.loss)
             self.saver = tf.train.Saver()
 
