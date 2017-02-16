@@ -269,6 +269,10 @@ class SyllableParser(object):
                 cell = rnn_cell.LSTMCell(self.hidden_size)
             elif self.cell_type == 'gru':
                 cell = rnn_cell.GRUCell(self.hidden_size)
+            elif self.cell_type == 'block_lstm':
+                print('asd')
+                cell = tf.contrib.rnn.LSTMBlockCell(self.hidden_size)
+                print('kek')
             else:
                 raise ValueError('Unknown cell type.')
             rnn_multicell = rnn_cell.MultiRNNCell([cell] * self.num_layers)
@@ -293,8 +297,8 @@ class SyllableParser(object):
             # self.prediction = tf.argmax(self.logits, 2)
             probs = tf.nn.softmax(self.logits)
             # print(probs.get_shape())
-            sliced_probs = tf.slice(probs, [0, 0, 1], [-1, -1, -1])
-            greater = tf.greater(sliced_probs, treshold)
+            self.sliced_probs = tf.slice(probs, [0, 0, 1], [-1, -1, -1])
+            greater = tf.greater(self.sliced_probs, treshold)
             # print(greater.get_shape())
             self.separation_indices = tf.where(greater)
             self.prediction = tf.zeros_like(greater)
