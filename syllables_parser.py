@@ -5,7 +5,7 @@ import re
 from time import time
 import numpy as np
 import tensorflow as tf
-from tensorflow.python.ops import rnn_cell
+from tensorflow.contrib.rnn.python.ops import core_rnn_cell as rnn_cell
 from tensorflow.python.ops.nn import bidirectional_dynamic_rnn as dynamic_brnn
 from tensorflow.python.ops.nn import dynamic_rnn as dynamic_rnn
 
@@ -283,7 +283,7 @@ class SyllableParser(object):
                                                sequence_length=self.seq_lengths,
                                                dtype=tf.float32,
                                                swap_memory=True)
-                self.outputs = tf.concat(2, self.outputs)
+                self.outputs = tf.concat(self.outputs, 2)
             # print(self.outputs.get_shape())
             outputs_reshape = tf.reshape(self.outputs, [-1, hidden_state_size])
             # print(outputs_reshape.get_shape())
@@ -303,7 +303,7 @@ class SyllableParser(object):
             # print(sliced_probs.get_shape())
             # print(self.prediction.get_shape())
             unmasked_ce = tf.nn.sparse_softmax_cross_entropy_with_logits(
-                                        self.logits, self.syllable_labels)
+                                        logits=self.logits, labels=self.syllable_labels)
             mask = tf.sequence_mask(self.seq_lengths,
                                     tf.reduce_max(self.seq_lengths),
                                     dtype=tf.float32)
@@ -320,7 +320,7 @@ class SyllableParser(object):
         """
         with self.graph.as_default():
             self.session = tf.Session()
-            self.session.run(tf.initialize_all_variables())
+            self.session.run(tf.global_variables_initializer())
             print("Checking for checkpoints...")
             latest_checkpoint = tf.train.latest_checkpoint(checkpoints_dir)
             if latest_checkpoint is not None:
@@ -413,8 +413,10 @@ class SyllableParser(object):
         Returns:
             session: Tensorflow session object, which can be used for sampling.
         """
+
         self.fit_data(filename)
         self.construct_graph()
+        os.makedirs(checkpoints_dir, exist_ok=True)
         mean_val_accuracy = self.run_session(checkpoints_dir)
         return mean_val_accuracy, self.session  # for further sampling
 

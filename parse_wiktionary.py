@@ -46,5 +46,6 @@ def parse(filename):
                         out_file.write(title_text + "\t" + " | ".join(parsed) +
                                        '\n')
 
+
 if __name__ == "__main__":
     parse(sys.argv[1])
