@@ -203,7 +203,7 @@ class SyllableParser(object):
             X, y = self.X[train_size:], self.y[train_size:]
             lengths = self.lengths[train_size:]
         elif mode == 'test':
-            X, y = self.X_test, self.y[:len(self.X_test)]
+            X, y = self.X_test, np.zeros(shape=(len(self.X_test), 1))
             lengths = self.test_lengths
         else:
             raise ValueError('Unknown mode.')
@@ -451,5 +451,5 @@ class SyllableParser(object):
                     prediction = self.decode_prediction(words_batch, pred,
                                                         lengths_batch)
                     for word, syllables in prediction:
-                        print(word, ' '.join(syllables))
+                        # print(word, ' '.join(syllables))
                         fout.write(word + ' ' + ' '.join(syllables) + '\n')
