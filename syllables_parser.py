@@ -149,10 +149,13 @@ class SyllableParser(object):
                 Each line of the file should contain one word.
         """
         X = []
+        y = []
         with open(filename) as fin:
             for line in fin:
+                y.append(self.count_syllables(line))
                 X.append(self.encode(line))
         self.X_test, self.test_lengths = X, list(map(len, X))
+        self.y_test = y
 
     def decode_prediction(self, words, predicted_labels, lengths):
         """Construct human-readable syllables out of predicted syllable labels.
@@ -182,6 +185,15 @@ class SyllableParser(object):
             items.append((self.decode(word[:length]), syllables))
         return items
 
+    def count_syllables(self, line):
+        y = []
+        for symbol in line:
+            if symbol in 'уеыаоэёяию':
+                y.append(1)
+            else:
+                y.append(0)
+        return y
+
     def get_batches(self, mode):
         """Generate batches of training, testing or validation data.
 
@@ -204,7 +216,7 @@ class SyllableParser(object):
             X, y = self.X[train_size:], self.y[train_size:]
             lengths = self.lengths[train_size:]
         elif mode == 'test':
-            X, y = self.X_test, np.zeros(shape=(len(self.X_test), 1))
+            X, y = self.X_test, self.y_test
             lengths = self.test_lengths
         else:
             raise ValueError('Unknown mode.')
@@ -446,9 +458,17 @@ class SyllableParser(object):
                     feed_dict = {self.words: words_batch,
                                  self.syllable_labels: syllable_labels_batch,
                                  self.seq_lengths: lengths_batch}
-                    pred, indices = session.run([self.prediction,
-                                                 self.separation_indices],
-                                                feed_dict=feed_dict)
+                    (pred, indices, probs,
+                     nums_of_syllables) = session.run([self.prediction,
+                                                       self.separation_indices,
+                                                       self.sliced_probs,
+                                                       self.num_syllables],
+                                                      feed_dict=feed_dict)
+                    all_indices = []
+                    for k, word_probs in zip(nums_of_syllables, probs):
+                        indices = top_k_indices(word_probs)
+                        all_indices.append(indices)
+                    all_indices = np.vstack(all_indices)
                     pred[indices[:, 0], indices[:, 1], indices[:, 2]] = 1
                     prediction = self.decode_prediction(words_batch, pred,
                                                         lengths_batch)
