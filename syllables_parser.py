@@ -266,7 +266,7 @@ class SyllableParser(object):
             embedding = tf.nn.embedding_lookup(embedding_matrix, self.words)
             treshold = tf.Variable(np.array([self.treshold]), dtype=tf.float32,
                                    name='treshold')
-            self.num_syllables = tf.reduce_sum(tf.cast(tf.self.syllable_labels, tf.float32) *
+            self.num_syllables = tf.reduce_sum(tf.cast(self.syllable_labels, tf.float32) *
                                                tf.sequence_mask(self.seq_lengths,
                                                                 tf.reduce_max(self.seq_lengths),
                                                                 dtype=tf.float32), 1)
