@@ -367,11 +367,13 @@ class SyllableParser(object):
                                                           self.sliced_probs,
                                                           self.loss],
                                                          feed_dict=feed_dict)
-                    if self.treshold is not None:  # TODO: fix future error in graph construction
-                        pred[indices[:, 0], indices[:, 1], indices[:, 2]] = 1
-                    else:
-                        for k, word_probs in zip(nums_of_syllables, probs):
-                            indices = top_k_indices(word_probs)
+                    # pred[indices[:, 0], indices[:, 1], indices[:, 2]] = 1
+                    all_indices = []
+                    for k, word_probs in zip(nums_of_syllables, probs):
+                        indices = top_k_indices(word_probs)
+                        all_indices.append(indices)
+                    all_indices = np.vstack(all_indices)
+                    pred[indices[:, 0], indices[:, 1], indices[:, 2]] = 1
                     val_losses.append(val_loss)
                     pred = pred.reshape((pred.shape[0],
                                          pred.shape[1])).astype(np.int32)
