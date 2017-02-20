@@ -8,6 +8,7 @@ import tensorflow as tf
 from tensorflow.contrib.rnn.python.ops import core_rnn_cell as rnn_cell
 from tensorflow.python.ops.nn import bidirectional_dynamic_rnn as dynamic_brnn
 from tensorflow.python.ops.nn import dynamic_rnn as dynamic_rnn
+from utils import top_k_indices
 
 
 class SyllableParser(object):
@@ -121,7 +122,7 @@ class SyllableParser(object):
         Args:
             filename: A string, which represents name of file with training
                 data. Each line of the file should be in format:
-                'word\tsyl lab les'.
+                'word\tsyl la bles'.
         """
         with open(filename) as fin:
             self.mapping = list(set(list(''.join(fin.readlines()))))
@@ -265,14 +266,16 @@ class SyllableParser(object):
             embedding = tf.nn.embedding_lookup(embedding_matrix, self.words)
             treshold = tf.Variable(np.array([self.treshold]), dtype=tf.float32,
                                    name='treshold')
+            self.num_syllables = tf.reduce_sum(self.syllable_labels *
+                                               tf.sequence_mask(self.seq_lengths,
+                                                                tf.reduce_max(self.seq_lengths),
+                                                                dtype=tf.float32), 1)
             if self.cell_type == 'lstm':
                 cell = rnn_cell.LSTMCell(self.hidden_size)
             elif self.cell_type == 'gru':
                 cell = rnn_cell.GRUCell(self.hidden_size)
             elif self.cell_type == 'block_lstm':
-                print('asd')
                 cell = tf.contrib.rnn.LSTMBlockCell(self.hidden_size)
-                print('kek')
             else:
                 raise ValueError('Unknown cell type.')
             rnn_multicell = rnn_cell.MultiRNNCell([cell] * self.num_layers)
@@ -288,24 +291,14 @@ class SyllableParser(object):
                                                dtype=tf.float32,
                                                swap_memory=True)
                 self.outputs = tf.concat(self.outputs, 2)
-            # print(self.outputs.get_shape())
             outputs_reshape = tf.reshape(self.outputs, [-1, hidden_state_size])
-            # print(outputs_reshape.get_shape())
-            # print(W.get_shape())
             logits = tf.matmul(outputs_reshape, W) + b
             self.logits = tf.reshape(logits, [self.batch_size, -1, 2])
-            # print(self.logits.get_shape())
-            # print(self.syllable_labels.get_shape())
-            # self.prediction = tf.argmax(self.logits, 2)
             probs = tf.nn.softmax(self.logits)
-            # print(probs.get_shape())
             self.sliced_probs = tf.slice(probs, [0, 0, 1], [-1, -1, -1])
             greater = tf.greater(self.sliced_probs, treshold)
-            # print(greater.get_shape())
             self.separation_indices = tf.where(greater)
             self.prediction = tf.zeros_like(greater)
-            # print(sliced_probs.get_shape())
-            # print(self.prediction.get_shape())
             unmasked_ce = tf.nn.sparse_softmax_cross_entropy_with_logits(
                                         logits=self.logits, labels=self.syllable_labels)
             mask = tf.sequence_mask(self.seq_lengths,
@@ -367,11 +360,18 @@ class SyllableParser(object):
                                  self.syllable_labels: val_syllable_label_batch,
                                  self.seq_lengths: val_lengths_batch}
                     (pred, indices,
-                     val_loss) = self.session.run([self.prediction,
-                                                   self.separation_indices,
-                                                   self.loss],
-                                                  feed_dict=feed_dict)
-                    pred[indices[:, 0], indices[:, 1], indices[:, 2]] = 1
+                     nums_of_syllables,
+                     probs, val_loss) = self.session.run([self.prediction,
+                                                          self.separation_indices,
+                                                          self.num_syllables,
+                                                          self.sliced_probs,
+                                                          self.loss],
+                                                         feed_dict=feed_dict)
+                    if self.treshold is not None:  # TODO: fix future error in graph construction
+                        pred[indices[:, 0], indices[:, 1], indices[:, 2]] = 1
+                    else:
+                        for k, word_probs in zip(nums_of_syllables, probs):
+                            indices = top_k_indices(word_probs)
                     val_losses.append(val_loss)
                     pred = pred.reshape((pred.shape[0],
                                          pred.shape[1])).astype(np.int32)
@@ -451,5 +451,5 @@ class SyllableParser(object):
                     prediction = self.decode_prediction(words_batch, pred,
                                                         lengths_batch)
                     for word, syllables in prediction:
-                        # print(word, ' '.join(syllables))
+                        print(word, ' '.join(syllables))
                         fout.write(word + ' ' + ' '.join(syllables) + '\n')
