@@ -15,7 +15,7 @@ class SyllableParser(object):
     """Tensorflow model for parsing syllables."""
 
     def __init__(self, num_epochs=100, batch_size=20, hidden_size=128,
-                 cell_type='lstm', net_type='brnn', num_layers=3, treshold=0.5):
+                 cell_type='lstm', net_type='rnn', num_layers=3, treshold=0.5):
         """Init SyllableParser.
 
         Args:
@@ -187,7 +187,7 @@ class SyllableParser(object):
 
     def count_syllables(self, line):
         y = []
-        for symbol in line:
+        for symbol in line.strip():
             if symbol in 'уеыаоэёяию':
                 y.append(1)
             else:
@@ -307,10 +307,12 @@ class SyllableParser(object):
             logits = tf.matmul(outputs_reshape, W) + b
             self.logits = tf.reshape(logits, [self.batch_size, -1, 2])
             probs = tf.nn.softmax(self.logits)
+            # probabilities only for positive class
             self.sliced_probs = tf.slice(probs, [0, 0, 1], [-1, -1, -1])
+            self.sliced_probs = tf.squeeze(self.sliced_probs, axis=2)
             greater = tf.greater(self.sliced_probs, treshold)
             self.separation_indices = tf.where(greater)
-            self.prediction = tf.zeros_like(greater)
+            self.prediction = tf.zeros_like(greater, dtype=tf.float32)
             unmasked_ce = tf.nn.sparse_softmax_cross_entropy_with_logits(
                                         logits=self.logits, labels=self.syllable_labels)
             mask = tf.sequence_mask(self.seq_lengths,
@@ -328,7 +330,9 @@ class SyllableParser(object):
                 where to save model checkpoints.
         """
         with self.graph.as_default():
-            self.session = tf.Session()
+            # config = tf.ConfigProto()
+            # config.graph_options.optimizer_options.global_jit_level = tf.OptimizerOptions.ON_1
+            self.session = tf.Session()  # config=config)
             self.session.run(tf.global_variables_initializer())
             print("Checking for checkpoints...")
             latest_checkpoint = tf.train.latest_checkpoint(checkpoints_dir)
@@ -361,7 +365,7 @@ class SyllableParser(object):
                                                      feed_dict=feed_dict)
                     batch_losses.append(batch_loss)
                 end = time()
-                epoch_result = 'Epoch {} done. Loss: {}. Training took {} sec.'
+                epoch_result = 'Epoch {} done. Train loss: {}. Training took {} sec.'
                 print(epoch_result.format(epoch, np.mean(batch_losses),
                                           end - start))
                 val_losses = []
@@ -380,15 +384,18 @@ class SyllableParser(object):
                                                           self.loss],
                                                          feed_dict=feed_dict)
                     # pred[indices[:, 0], indices[:, 1], indices[:, 2]] = 1
-                    all_indices = []
-                    for k, word_probs in zip(nums_of_syllables, probs):
-                        indices = top_k_indices(word_probs)
-                        all_indices.append(indices)
-                    all_indices = np.vstack(all_indices)
-                    pred[indices[:, 0], indices[:, 1], indices[:, 2]] = 1
+                    for idx, (k, word_probs, length) in enumerate(zip(nums_of_syllables, probs,
+                                                                      val_lengths_batch)):
+                        indices = top_k_indices(word_probs[:length], k=k)
+                        pred[idx][indices] = 1
+                        # if idx % 100 == 0:
+                        #     print(self.decode(val_words_batch[idx][:length]))
+                        #     print(f'\n\tk: {k}\n\tlength: {length}\n\tprobs: {word_probs}\n\tpred:'
+                        #           f' {pred[idx]}\n'
+                        #           f'\tindices:{indices}\n')
                     val_losses.append(val_loss)
-                    pred = pred.reshape((pred.shape[0],
-                                         pred.shape[1])).astype(np.int32)
+                    # pred = pred.reshape((pred.shape[0],
+                    #                     pred.shape[1])).astype(np.int32)
                 print('Validation loss: %f' % np.mean(val_losses))
                 accuracy = self.accuracy(val_syllable_label_batch,
                                          pred, val_lengths_batch)
@@ -464,14 +471,12 @@ class SyllableParser(object):
                                                        self.sliced_probs,
                                                        self.num_syllables],
                                                       feed_dict=feed_dict)
-                    all_indices = []
-                    for k, word_probs in zip(nums_of_syllables, probs):
-                        indices = top_k_indices(word_probs)
-                        all_indices.append(indices)
-                    all_indices = np.vstack(all_indices)
-                    pred[indices[:, 0], indices[:, 1], indices[:, 2]] = 1
+                    for idx, (k, word_probs, length) in enumerate(zip(nums_of_syllables, probs,
+                                                                      lengths_batch)):
+                        indices = top_k_indices(word_probs[:length], k=k)
+                        pred[idx][indices] = 1
                     prediction = self.decode_prediction(words_batch, pred,
                                                         lengths_batch)
                     for word, syllables in prediction:
-                        print(word, ' '.join(syllables))
+                        # print(word, ' '.join(syllables))
                         fout.write(word + ' ' + ' '.join(syllables) + '\n')

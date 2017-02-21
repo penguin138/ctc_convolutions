@@ -4,4 +4,4 @@ def top_k(values, k=1):
 
 
 def top_k_indices(values, k=1):
-    return sorted(range(len(values)), key=lambda x: values[x], reverse=True)[:k]
+    return sorted(range(len(values)), key=lambda x: values[x], reverse=True)[:int(k)]
