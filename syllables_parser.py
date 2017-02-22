@@ -15,7 +15,7 @@ class SyllableParser(object):
     """Tensorflow model for parsing syllables."""
 
     def __init__(self, num_epochs=100, batch_size=20, hidden_size=128,
-                 cell_type='lstm', net_type='rnn', num_layers=3, treshold=0.5):
+                 cell_type='lstm', net_type='brnn', num_layers=3, treshold=0.5):
         """Init SyllableParser.
 
         Args:
