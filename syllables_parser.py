@@ -5,6 +5,7 @@ import re
 from time import time
 import numpy as np
 import tensorflow as tf
+import pickle
 from tensorflow.contrib.rnn.python.ops import core_rnn_cell as rnn_cell
 from tensorflow.python.ops.nn import bidirectional_dynamic_rnn as dynamic_brnn
 from tensorflow.python.ops.nn import dynamic_rnn as dynamic_rnn
@@ -14,15 +15,13 @@ from utils import top_k_indices
 class SyllableParser(object):
     """Tensorflow model for parsing syllables."""
 
-    def __init__(self, num_epochs=100, batch_size=20, hidden_size=128,
+    def __init__(self, num_epochs=100, hidden_size=128,
                  cell_type='lstm', net_type='brnn', num_layers=3, treshold=0.5):
         """Init SyllableParser.
 
         Args:
             num_epochs: A non-negative integer, which represents number of
                 training epochs. Defaults to 100.
-            batch_size: A non-negative integer, which represents size of
-                training batch. Defaults to 20.
             hidden_size: A non-negative integer, which represents size of RNN
                 hidden vector. Defaults to 128.
             cell_type: A string, which represents type of RNN cell used.
@@ -38,14 +37,13 @@ class SyllableParser(object):
                 at that point.
         """
         self.num_epochs = num_epochs
-        self.batch_size = batch_size
         self.hidden_size = hidden_size
         self.cell_type = cell_type
         self.num_layers = num_layers
         self.net_type = net_type
         self.treshold = treshold
 
-    def encode(self, word):
+    def _encode(self, word):
         """Encode word according to mapping from letters to indices.
 
         Note: self.mapping must be constructed before calling this function.
@@ -61,7 +59,7 @@ class SyllableParser(object):
         return list(map(lambda x: self.mapping.index(x),
                         list(word.strip().lower())))
 
-    def decode(self, encoded_word):
+    def _decode(self, encoded_word):
         """Decode list of integers according to mapping from letters to indices.
 
         Args:
@@ -76,7 +74,7 @@ class SyllableParser(object):
         return ''.join(map(lambda x: self.mapping[x],
                            list(map(int, encoded_word))))
 
-    def encode_syllables(self, syllables):
+    def _encode_syllables(self, syllables):
         """Encode all syllables in list.
 
         Args:
@@ -91,7 +89,7 @@ class SyllableParser(object):
                                           [1]))
         return encoded_syllables
 
-    def pad_into_matrix(self, rows, padding_value=0):
+    def _pad_into_matrix(self, rows, padding_value=0):
         """Pad rows with padding_value, so that they all have the same length.
 
         Args:
@@ -116,7 +114,7 @@ class SyllableParser(object):
         matrix = np.vstack(matrix)
         return matrix, lengths
 
-    def fit_data(self, filename):
+    def _fit_data(self, filename):
         r"""Parse and encode training data.
 
         Args:
@@ -133,15 +131,15 @@ class SyllableParser(object):
                 if idx == 0:
                     continue  # this is csv header
                 tokens = re.split(r'\t', line)
-                encoded_word = self.encode(tokens[0])
-                encoded_syllables = self.encode_syllables(re.split(r'\s+',
-                                                                   tokens[1]))
+                encoded_word = self._encode(tokens[0])
+                encoded_syllables = self._encode_syllables(re.split(r'\s+',
+                                                                    tokens[1]))
                 X.append(encoded_word)
                 y.append(encoded_syllables)
             self.X, self.lengths = X, list(map(len, X))
             self.y = y
 
-    def prepare_test_data(self, filename):
+    def _prepare_test_data(self, filename):
         """Parse and encode test data.
 
         Args:
@@ -152,12 +150,12 @@ class SyllableParser(object):
         y = []
         with open(filename) as fin:
             for line in fin:
-                y.append(self.count_syllables(line))
-                X.append(self.encode(line))
+                y.append(self._count_syllables(line))
+                X.append(self._encode(line))
         self.X_test, self.test_lengths = X, list(map(len, X))
         self.y_test = y
 
-    def decode_prediction(self, words, predicted_labels, lengths):
+    def _decode_prediction(self, words, predicted_labels, lengths):
         """Construct human-readable syllables out of predicted syllable labels.
 
         Args:
@@ -173,7 +171,7 @@ class SyllableParser(object):
             word, pred, length = words[i], predicted_labels[i], lengths[i]
             syllables = []
             syllable = []
-            for ch, idx in zip(list(self.decode(word[:length])), pred[:length]):
+            for ch, idx in zip(list(self._decode(word[:length])), pred[:length]):
                 if idx == 0:
                     syllable.append(ch)
                 if idx == 1:
@@ -182,10 +180,10 @@ class SyllableParser(object):
                     syllable = []
             if len(syllable) > 0:
                 syllables.append(''.join(syllable))
-            items.append((self.decode(word[:length]), syllables))
+            items.append((self._decode(word[:length]), syllables))
         return items
 
-    def count_syllables(self, line):
+    def _count_syllables(self, line):
         y = []
         for symbol in line.strip():
             if symbol in 'уеыаоэёяию':
@@ -194,7 +192,7 @@ class SyllableParser(object):
                 y.append(0)
         return y
 
-    def get_batches(self, mode):
+    def _get_batches(self, mode):
         """Generate batches of training, testing or validation data.
 
         Args:
@@ -223,15 +221,15 @@ class SyllableParser(object):
         X_batch, y_batch, lengths_batch = [], [], []
         for idx, x_sample in enumerate(X):
             if idx > 0 and idx % self.batch_size == 0:
-                X_batch, lengths_batch = self.pad_into_matrix(X_batch, 0)
-                y_batch, _ = self.pad_into_matrix(y_batch, 0)
+                X_batch, lengths_batch = self._pad_into_matrix(X_batch, 0)
+                y_batch, _ = self._pad_into_matrix(y_batch, 0)
                 yield X_batch, y_batch, lengths_batch
                 X_batch, y_batch, lengths_batch = [], [], []
             X_batch.append(x_sample)
             y_batch.append(y[idx])
             lengths_batch.append(lengths[idx])
 
-    def accuracy(self, true_syllables, pred_syllables, seq_lengths):
+    def _accuracy(self, true_syllables, pred_syllables, seq_lengths):
         """Compute masked accuracy.
 
         Args:
@@ -253,19 +251,19 @@ class SyllableParser(object):
         # true_predictions = len(results[results == True])
         return num_true_predictions / float(len(true_syllables))
 
-    def construct_graph(self):
+    def _construct_graph(self):
         """Construct Tensorflow graph."""
         self.graph = tf.Graph()
         hidden_state_size = self.hidden_size
         if self.net_type == 'brnn':
             hidden_state_size *= 2
         with self.graph.as_default():
-            self.words = tf.placeholder(tf.int32, shape=(self.batch_size, None),
+            self.words = tf.placeholder(tf.int32, shape=(None, None),
                                         name='words')
             self.syllable_labels = tf.placeholder(tf.int32,
-                                                  shape=(self.batch_size, None),
+                                                  shape=(None, None),
                                                   name='syllable_labels')
-            self.seq_lengths = tf.placeholder(tf.int32, shape=(self.batch_size),
+            self.seq_lengths = tf.placeholder(tf.int32, shape=(None),
                                               name='lengths')
             W = tf.Variable(tf.truncated_normal([hidden_state_size, 2]),
                             dtype=tf.float32)
@@ -307,7 +305,7 @@ class SyllableParser(object):
             logits = tf.matmul(outputs_reshape, W) + b
             self.logits = tf.reshape(logits, [self.batch_size, -1, 2])
             probs = tf.nn.softmax(self.logits)
-            # probabilities only for positive class
+            # probabilities only for positive class:
             self.sliced_probs = tf.slice(probs, [0, 0, 1], [-1, -1, -1])
             self.sliced_probs = tf.squeeze(self.sliced_probs, axis=2)
             greater = tf.greater(self.sliced_probs, treshold)
@@ -322,7 +320,7 @@ class SyllableParser(object):
             self.optimizer = tf.train.AdamOptimizer().minimize(self.loss)
             self.saver = tf.train.Saver()
 
-    def run_session(self, checkpoints_dir):
+    def _run_session(self, checkpoints_dir):
         """Run Tensorflow model training.
 
         Args:
@@ -341,6 +339,7 @@ class SyllableParser(object):
                 self.saver.restore(self.session, latest_checkpoint)
             else:
                 print("No checkpoints found, starting training from scratch.")
+                self._dump_parameters(checkpoints_dir)
             accuracies = []
             for epoch in range(self.num_epochs):
                 print("Starting epoch {}".format(epoch))
@@ -348,12 +347,12 @@ class SyllableParser(object):
                 start = time()
                 for (words_batch,
                      syllable_labels_batch,
-                     lengths_batch) in self.get_batches('train'):
+                     lengths_batch) in self._get_batches('train'):
                     feed_dict = {self.words: words_batch,
                                  self.syllable_labels: syllable_labels_batch,
                                  self.seq_lengths: lengths_batch}
                     if words_batch.shape != syllable_labels_batch.shape:
-                        prediction = self.decode_prediction(
+                        prediction = self._decode_prediction(
                                      words_batch,
                                      syllable_labels_batch, lengths_batch)
                         print("Bad train examples:")
@@ -371,7 +370,7 @@ class SyllableParser(object):
                 val_losses = []
                 for (val_words_batch,
                      val_syllable_label_batch,
-                     val_lengths_batch) in self.get_batches('val'):
+                     val_lengths_batch) in self._get_batches('val'):
                     feed_dict = {self.words: val_words_batch,
                                  self.syllable_labels: val_syllable_label_batch,
                                  self.seq_lengths: val_lengths_batch}
@@ -390,7 +389,7 @@ class SyllableParser(object):
                         pred[idx][indices] = 1
                         # if idx % 100 == 0:
                         #     print(self.decode(val_words_batch[idx][:length]))
-                        #     print(f'\n\tk: {k}\n\tlength: {length}\n\tprobs: {word_probs}\n\tpred:'
+                        #    print(f'\n\tk: {k}\n\tlength: {length}\n\tprobs: {word_probs}\n\tpred:'
                         #           f' {pred[idx]}\n'
                         #           f'\tindices:{indices}\n')
                     val_losses.append(val_loss)
@@ -402,11 +401,11 @@ class SyllableParser(object):
                 accuracies.append(accuracy)
                 print('Accuracy: %f' % accuracy)
                 indices = np.random.choice(np.arange(len(val_words_batch)), 3)
-                prediction = self.decode_prediction(val_words_batch[indices],
-                                                    pred[indices],
-                                                    val_lengths_batch[indices])
-                true_values = self.decode_prediction(val_words_batch[indices],
-                                                     val_syllable_label_batch[
+                prediction = self._decode_prediction(val_words_batch[indices],
+                                                     pred[indices],
+                                                     val_lengths_batch[indices])
+                true_values = self._decode_prediction(val_words_batch[indices],
+                                                      val_syllable_label_batch[
                                                      indices],
                                                      val_lengths_batch[indices])
                 # print(pred[sample_indices],
@@ -427,7 +426,29 @@ class SyllableParser(object):
                     print("Saved in " + save_path)
             return np.mean(accuracies)
 
-    def train(self, filename, checkpoints_dir):
+    def _dump_parameters(self, checkpoints_dir):
+        with open(os.path.join(checkpoints_dir, 'params'), 'w') as params_file:
+            pickle.dump(self.__dict__, params_file)
+
+    def _load_parameters(self, checkpoints_dir):
+        with open(os.path.join(checkpoints_dir, 'params')) as params_file:
+            self.__dict__ = pickle.load(params_file)
+
+    def restore(self, checkpoints_dir):
+        if os.path.exists(checkpoints_dir) and len(list(os.listdir(checkpoints_dir))) > 1:
+            self._load_parameters(checkpoints_dir)
+        self._construct_graph()
+        with self.graph.as_default():
+            session = tf.Session()
+            session.run(tf.global_variables_initializer())
+            latest_checkpoint = tf.train.latest_checkpoint(checkpoints_dir)
+            if latest_checkpoint is not None:
+                self.saver.restore(session, latest_checkpoint)
+                return session  # for sampling
+            else:
+                print("No checkpoints found")
+
+    def train(self, filename, checkpoints_dir, batch_size=20):
         """Train model.
 
         Args:
@@ -435,14 +456,20 @@ class SyllableParser(object):
                 data.
             checkpoints_dir: A string which represents a path to directory,
                 where to save checkpoints.
+            batch_size: A non-negative integer, which represents size of
+                training batch. Defaults to 20.
         Returns:
             session: Tensorflow session object, which can be used for sampling.
         """
+        if os.path.exists(checkpoints_dir) and len(list(os.listdir(checkpoints_dir))) > 1:
+            # that is there are checkpoints worth restoring
+            self._load_parameters(checkpoints_dir)
 
-        self.fit_data(filename)
-        self.construct_graph()
+        self.batch_size = batch_size
+        self._fit_data(filename)
+        self._construct_graph()
         os.makedirs(checkpoints_dir, exist_ok=True)
-        mean_val_accuracy = self.run_session(checkpoints_dir)
+        mean_val_accuracy = self._run_session(checkpoints_dir)
         return mean_val_accuracy, self.session  # for further sampling
 
     def sample(self, session, filename, out_file='output.txt'):
@@ -456,7 +483,7 @@ class SyllableParser(object):
             out_file: A string, which represents a name of output file, where to
             save syllables. Defaults to 'output.txt'
         """
-        self.prepare_test_data(filename)
+        self._prepare_test_data(filename)
         with open(out_file, 'w') as fout:
             with self.graph.as_default():
                 print('Sampling...')
@@ -475,8 +502,8 @@ class SyllableParser(object):
                                                                       lengths_batch)):
                         indices = top_k_indices(word_probs[:length], k=k)
                         pred[idx][indices] = 1
-                    prediction = self.decode_prediction(words_batch, pred,
-                                                        lengths_batch)
+                    prediction = self._decode_prediction(words_batch, pred,
+                                                         lengths_batch)
                     for word, syllables in prediction:
                         # print(word, ' '.join(syllables))
                         fout.write(word + ' ' + ' '.join(syllables) + '\n')
