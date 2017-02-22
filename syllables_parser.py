@@ -136,7 +136,7 @@ class SyllableParser(object):
             self.X, self.lengths = X, list(map(len, X))
             self.y = y
 
-    def _prepare_test_data(self, filename):
+    def _prepare_test_data(self, filename=None, token_seqs=None):
         """Parse and encode test data.
 
         Args:
@@ -145,10 +145,15 @@ class SyllableParser(object):
         """
         X = []
         y = []
-        with open(filename) as fin:
-            for line in fin:
-                y.append(self._count_syllables(line))
-                X.append(self._encode(line))
+        if filename is not None:
+            with open(filename) as fin:
+                for line in fin:
+                    y.append(self._count_syllables(line))
+                    X.append(self._encode(line))
+        else:
+            for sequence in token_seqs:
+                y.append(self._count_syllables(sequence))
+                X.append(self._encode(sequence))
         self.X_test, self.test_lengths = X, list(map(len, X))
         self.y_test = y
 
@@ -189,7 +194,7 @@ class SyllableParser(object):
                 y.append(0)
         return y
 
-    def _get_batches(self, mode):
+    def _get_batches(self, mode, batch_size=None):
         """Generate batches of training, testing or validation data.
 
         Args:
@@ -203,6 +208,8 @@ class SyllableParser(object):
         Raises:
             ValueError: Unknown mode.
         """
+        if batch_size is None:
+            batch_size = self.batch_size
         if mode != 'test':
             train_size = int(0.9 * len(self.X))
         if mode == 'train':
@@ -218,7 +225,7 @@ class SyllableParser(object):
             raise ValueError('Unknown mode.')
         X_batch, y_batch, lengths_batch = [], [], []
         for idx, x_sample in enumerate(X):
-            if idx > 0 and idx % self.batch_size == 0:
+            if idx > 0 and idx % batch_size == 0:
                 X_batch, lengths_batch = self._pad_into_matrix(X_batch, 0)
                 y_batch, _ = self._pad_into_matrix(y_batch, 0)
                 yield X_batch, y_batch, lengths_batch
@@ -263,7 +270,7 @@ class SyllableParser(object):
                                                   name='syllable_labels')
             self.seq_lengths = tf.placeholder(tf.int32, shape=(None,),
                                               name='lengths')
-          
+
             W = tf.Variable(tf.truncated_normal([hidden_state_size, 2]),
                             dtype=tf.float32)
             b = tf.Variable(np.zeros([2]), dtype=tf.float32)
@@ -396,7 +403,7 @@ class SyllableParser(object):
                     #                     pred.shape[1])).astype(np.int32)
                 print('Validation loss: %f' % np.mean(val_losses))
                 accuracy = self._accuracy(val_syllable_label_batch,
-                                         pred, val_lengths_batch)
+                                          pred, val_lengths_batch)
                 accuracies.append(accuracy)
                 print('Accuracy: %f' % accuracy)
                 indices = np.random.choice(np.arange(len(val_words_batch)), 3)
@@ -480,7 +487,8 @@ class SyllableParser(object):
         mean_val_accuracy = self._run_session(checkpoints_dir)
         return mean_val_accuracy, self.session  # for further sampling
 
-    def sample(self, session, filename, out_file='output.txt'):
+    def sample(self, session, token_seqs=None, filename=None, out_file='output.txt',
+               batch_size=None):
         """Sample syllables for each word in file.
 
         Note: graph should be already constructed.
@@ -491,12 +499,13 @@ class SyllableParser(object):
             out_file: A string, which represents a name of output file, where to
             save syllables. Defaults to 'output.txt'
         """
-        self._prepare_test_data(filename)
+        self._prepare_test_data(filename=filename, token_seqs=token_seqs)
         with open(out_file, 'w') as fout:
             with self.graph.as_default():
-                print('Sampling...')
+                # print('Sampling...')
+                token_syllables = []
                 for (words_batch, syllable_labels_batch,
-                     lengths_batch) in self._get_batches('test'):
+                     lengths_batch) in self._get_batches('test', batch_size=batch_size):
                     feed_dict = {self.words: words_batch,
                                  self.syllable_labels: syllable_labels_batch,
                                  self.seq_lengths: lengths_batch}
@@ -514,4 +523,9 @@ class SyllableParser(object):
                                                          lengths_batch)
                     for word, syllables in prediction:
                         # print(word, ' '.join(syllables))
-                        fout.write(word + ' ' + ' '.join(syllables) + '\n')
+                        if token_seqs is None:
+                            fout.write(word + ' ' + ' '.join(syllables) + '\n')
+                        else:
+                            token_syllables.append(syllables)
+        if token_seqs is not None:
+            return token_syllables
