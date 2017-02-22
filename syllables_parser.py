@@ -15,13 +15,11 @@ from utils import top_k_indices
 class SyllableParser(object):
     """Tensorflow model for parsing syllables."""
 
-    def __init__(self, num_epochs=100, hidden_size=128,
+    def __init__(self, hidden_size=128,
                  cell_type='lstm', net_type='brnn', num_layers=3, treshold=0.5):
         """Init SyllableParser.
 
         Args:
-            num_epochs: A non-negative integer, which represents number of
-                training epochs. Defaults to 100.
             hidden_size: A non-negative integer, which represents size of RNN
                 hidden vector. Defaults to 128.
             cell_type: A string, which represents type of RNN cell used.
@@ -36,7 +34,6 @@ class SyllableParser(object):
                 point in word is greater than treshold, then we break the word
                 at that point.
         """
-        self.num_epochs = num_epochs
         self.hidden_size = hidden_size
         self.cell_type = cell_type
         self.num_layers = num_layers
@@ -206,7 +203,8 @@ class SyllableParser(object):
         Raises:
             ValueError: Unknown mode.
         """
-        train_size = int(0.9 * len(self.X))
+        if mode != 'test':
+            train_size = int(0.9 * len(self.X))
         if mode == 'train':
             X, y = self.X[:train_size], self.y[:train_size]
             lengths = self.lengths[:train_size]
@@ -263,8 +261,9 @@ class SyllableParser(object):
             self.syllable_labels = tf.placeholder(tf.int32,
                                                   shape=(None, None),
                                                   name='syllable_labels')
-            self.seq_lengths = tf.placeholder(tf.int32, shape=(None),
+            self.seq_lengths = tf.placeholder(tf.int32, shape=(None,),
                                               name='lengths')
+          
             W = tf.Variable(tf.truncated_normal([hidden_state_size, 2]),
                             dtype=tf.float32)
             b = tf.Variable(np.zeros([2]), dtype=tf.float32)
@@ -396,7 +395,7 @@ class SyllableParser(object):
                     # pred = pred.reshape((pred.shape[0],
                     #                     pred.shape[1])).astype(np.int32)
                 print('Validation loss: %f' % np.mean(val_losses))
-                accuracy = self.accuracy(val_syllable_label_batch,
+                accuracy = self._accuracy(val_syllable_label_batch,
                                          pred, val_lengths_batch)
                 accuracies.append(accuracy)
                 print('Accuracy: %f' % accuracy)
@@ -427,12 +426,18 @@ class SyllableParser(object):
             return np.mean(accuracies)
 
     def _dump_parameters(self, checkpoints_dir):
-        with open(os.path.join(checkpoints_dir, 'params'), 'w') as params_file:
-            pickle.dump(self.__dict__, params_file)
+        with open(os.path.join(checkpoints_dir, 'params'), 'wb') as params_file:
+            params = {'hidden_size': self.hidden_size,
+                      'cell_type': self.cell_type,
+                      'num_layers': self.num_layers,
+                      'net_type': self.net_type,
+                      'mapping': self.mapping,
+                      'batch_size': self.batch_size}
+            pickle.dump(params, params_file)
 
     def _load_parameters(self, checkpoints_dir):
-        with open(os.path.join(checkpoints_dir, 'params')) as params_file:
-            self.__dict__ = pickle.load(params_file)
+        with open(os.path.join(checkpoints_dir, 'params'), 'rb') as params_file:
+            self.__dict__.update(pickle.load(params_file))
 
     def restore(self, checkpoints_dir):
         if os.path.exists(checkpoints_dir) and len(list(os.listdir(checkpoints_dir))) > 1:
@@ -448,7 +453,7 @@ class SyllableParser(object):
             else:
                 print("No checkpoints found")
 
-    def train(self, filename, checkpoints_dir, batch_size=20):
+    def train(self, filename, checkpoints_dir, batch_size=20, num_epochs=200):
         """Train model.
 
         Args:
@@ -458,6 +463,8 @@ class SyllableParser(object):
                 where to save checkpoints.
             batch_size: A non-negative integer, which represents size of
                 training batch. Defaults to 20.
+            num_epochs: A non-negative integer, which represents number of
+                training epochs. Defaults to 200.
         Returns:
             session: Tensorflow session object, which can be used for sampling.
         """
@@ -466,6 +473,7 @@ class SyllableParser(object):
             self._load_parameters(checkpoints_dir)
 
         self.batch_size = batch_size
+        self.num_epochs = num_epochs
         self._fit_data(filename)
         self._construct_graph()
         os.makedirs(checkpoints_dir, exist_ok=True)
@@ -488,7 +496,7 @@ class SyllableParser(object):
             with self.graph.as_default():
                 print('Sampling...')
                 for (words_batch, syllable_labels_batch,
-                     lengths_batch) in self.get_batches('test'):
+                     lengths_batch) in self._get_batches('test'):
                     feed_dict = {self.words: words_batch,
                                  self.syllable_labels: syllable_labels_batch,
                                  self.seq_lengths: lengths_batch}
