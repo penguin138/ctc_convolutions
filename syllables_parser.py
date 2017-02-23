@@ -270,6 +270,7 @@ class SyllableParser(object):
                                                   name='syllable_labels')
             self.seq_lengths = tf.placeholder(tf.int32, shape=(None,),
                                               name='lengths')
+            batch_size = tf.shape(self.words)[0]
 
             W = tf.Variable(tf.truncated_normal([hidden_state_size, 2]),
                             dtype=tf.float32)
@@ -309,7 +310,7 @@ class SyllableParser(object):
                 self.outputs = tf.concat(self.outputs, 2)
             outputs_reshape = tf.reshape(self.outputs, [-1, hidden_state_size])
             logits = tf.matmul(outputs_reshape, W) + b
-            self.logits = tf.reshape(logits, [self.batch_size, -1, 2])
+            self.logits = tf.reshape(logits, [batch_size, -1, 2])
             probs = tf.nn.softmax(self.logits)
             # probabilities only for positive class:
             self.sliced_probs = tf.slice(probs, [0, 0, 1], [-1, -1, -1])
