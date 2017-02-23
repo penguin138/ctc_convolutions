@@ -9,7 +9,7 @@ import pickle
 from tensorflow.contrib.rnn.python.ops import core_rnn_cell as rnn_cell
 from tensorflow.python.ops.nn import bidirectional_dynamic_rnn as dynamic_brnn
 from tensorflow.python.ops.nn import dynamic_rnn as dynamic_rnn
-from utils import top_k_indices
+from .utils import top_k_indices
 
 
 class SyllableParser(object):
