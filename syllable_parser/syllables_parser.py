@@ -233,6 +233,10 @@ class SyllableParser(object):
             X_batch.append(x_sample)
             y_batch.append(y[idx])
             lengths_batch.append(lengths[idx])
+        if len(X_batch) > 0:
+            X_batch, lengths_batch = self._pad_into_matrix(X_batch, 0)
+            y_batch, _ = self._pad_into_matrix(y_batch, 0)
+            yield X_batch, y_batch, lengths_batch
 
     def _accuracy(self, true_syllables, pred_syllables, seq_lengths):
         """Compute masked accuracy.
