@@ -2,7 +2,7 @@
 
 from setuptools import setup, find_packages
 
-requirements = ["numpy", "pandas", "beautifulsoup4"]
+requirements = ["numpy"]
 
 try:
     __import__('tensorflow')
