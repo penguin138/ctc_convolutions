@@ -356,6 +356,7 @@ class SyllableParser(object):
                 print("Starting epoch {}".format(epoch))
                 batch_losses = []
                 start = time()
+                train_accuracies = []
                 for (words_batch,
                      syllable_labels_batch,
                      lengths_batch) in self._get_batches('train'):
@@ -370,13 +371,25 @@ class SyllableParser(object):
                         for word, syllables in prediction:
                             print('\t', word, ' '.join(syllables))
 
-                    batch_loss, _ = self.session.run([self.loss,
-                                                      self.optimizer],
-                                                     feed_dict=feed_dict)
+                    (batch_loss, pred,
+                     nums_of_syllables, probs, _) = self.session.run([self.loss,
+                                                                      self.prediction,
+                                                                      self.num_syllables,
+                                                                      self.sliced_probs,
+                                                                      self.optimizer],
+                                                                      feed_dict=feed_dict)
+                    for idx, (k, word_probs, length) in enumerate(zip(nums_of_syllables, probs,
+                                                                      lengths_batch)):
+                        indices = top_k_indices(word_probs[:length], k=k)
+                        pred[idx][indices] = 1
+                    train_accuracy = self._accuracy(syllable_labels_batch,
+                                                    pred, lengths_batch)
+                    train_accuracies.append(train_accuracy)
                     batch_losses.append(batch_loss)
                 end = time()
-                epoch_result = 'Epoch {} done. Train loss: {}. Training took {} sec.'
+                epoch_result = 'Epoch {} done. Train loss: {}. Train accuracy: {} Training took {} sec.'
                 print(epoch_result.format(epoch, np.mean(batch_losses),
+                                          np.mean(train_accuracies),
                                           end - start))
                 val_losses = []
                 for (val_words_batch,
