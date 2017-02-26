@@ -351,7 +351,10 @@ class SyllableParser(object):
             else:
                 print("No checkpoints found, starting training from scratch.")
                 self._dump_parameters(checkpoints_dir)
-            accuracies = []
+            val_accuracies = []
+            train_accuracies = []
+            train_losses = []
+            valid_losses = []
             for epoch in range(self.num_epochs):
                 print("Starting epoch {}".format(epoch))
                 batch_losses = []
@@ -377,7 +380,7 @@ class SyllableParser(object):
                                                                       self.num_syllables,
                                                                       self.sliced_probs,
                                                                       self.optimizer],
-                                                                      feed_dict=feed_dict)
+                                                                     feed_dict=feed_dict)
                     for idx, (k, word_probs, length) in enumerate(zip(nums_of_syllables, probs,
                                                                       lengths_batch)):
                         indices = top_k_indices(word_probs[:length], k=k)
@@ -386,8 +389,10 @@ class SyllableParser(object):
                                                     pred, lengths_batch)
                     train_accuracies.append(train_accuracy)
                     batch_losses.append(batch_loss)
+                    train_losses.append(batch_loss)
                 end = time()
-                epoch_result = 'Epoch {} done. Train loss: {}. Train accuracy: {} Training took {} sec.'
+                epoch_result = ('Epoch {} done. Train loss: {}. '
+                                'Train accuracy: {} Training took {} sec.')
                 print(epoch_result.format(epoch, np.mean(batch_losses),
                                           np.mean(train_accuracies),
                                           end - start))
@@ -417,12 +422,14 @@ class SyllableParser(object):
                         #           f' {pred[idx]}\n'
                         #           f'\tindices:{indices}\n')
                     val_losses.append(val_loss)
+                    valid_losses.append(val_loss)
+                    accuracy = self._accuracy(val_syllable_label_batch,
+                                              pred, val_lengths_batch)
+                    val_accuracies.append(accuracy)
                     # pred = pred.reshape((pred.shape[0],
                     #                     pred.shape[1])).astype(np.int32)
                 print('Validation loss: %f' % np.mean(val_losses))
-                accuracy = self._accuracy(val_syllable_label_batch,
-                                          pred, val_lengths_batch)
-                accuracies.append(accuracy)
+
                 print('Accuracy: %f' % accuracy)
                 indices = np.random.choice(np.arange(len(val_words_batch)), 3)
                 prediction = self._decode_prediction(val_words_batch[indices],
@@ -448,7 +455,7 @@ class SyllableParser(object):
                                                 os.path.join(checkpoints_dir,
                                                              checkpoint_name))
                     print("Saved in " + save_path)
-            return np.mean(accuracies)
+            return train_accuracies, val_accuracies, train_losses, valid_losses
 
     def _dump_parameters(self, checkpoints_dir):
         with open(os.path.join(checkpoints_dir, 'params'), 'wb') as params_file:
@@ -502,8 +509,8 @@ class SyllableParser(object):
         self._fit_data(filename)
         self._construct_graph()
         os.makedirs(checkpoints_dir, exist_ok=True)
-        mean_val_accuracy = self._run_session(checkpoints_dir)
-        return mean_val_accuracy, self.session  # for further sampling
+        stats = self._run_session(checkpoints_dir)
+        return stats, self.session  # for further sampling
 
     def sample(self, session, token_seqs=None, filename=None, out_file='output.txt',
                batch_size=None):
