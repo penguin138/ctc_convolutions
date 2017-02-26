@@ -223,6 +223,12 @@ class SyllableParser(object):
             lengths = self.test_lengths
         else:
             raise ValueError('Unknown mode.')
+        if mode != 'test':
+            # print(X.shape)
+            indices = np.random.permutation(len(X)).astype(np.int32)
+            # print(type(indices))
+            X = np.array(X)[indices]
+            y = np.array(y)[indices]
         X_batch, y_batch, lengths_batch = [], [], []
         for idx, x_sample in enumerate(X):
             if idx > 0 and idx % batch_size == 0:
