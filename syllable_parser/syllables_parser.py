@@ -337,6 +337,13 @@ class SyllableParser(object):
             self.optimizer = tf.train.AdamOptimizer().minimize(self.loss)
             self.saver = tf.train.Saver()
 
+    def _get_prediction(self, pred, nums_of_syllables, probs, lengths_batch):
+        for idx, (k, word_probs, length) in enumerate(zip(nums_of_syllables, probs,
+                                                          lengths_batch)):
+            indices = top_k_indices(word_probs[:length], k=k)
+            pred[idx][indices] = 1
+        return pred
+
     def _run_session(self, checkpoints_dir):
         """Run Tensorflow model training.
 
@@ -357,15 +364,15 @@ class SyllableParser(object):
             else:
                 print("No checkpoints found, starting training from scratch.")
                 self._dump_parameters(checkpoints_dir)
-            val_accuracies = []
-            train_accuracies = []
-            train_losses = []
-            valid_losses = []
+            all_valid_accuracies = []
+            all_train_accuracies = []
+            all_train_losses = []
+            all_valid_losses = []
             for epoch in range(self.num_epochs):
                 print("Starting epoch {}".format(epoch))
-                batch_losses = []
+                train_batch_losses = []
                 start = time()
-                train_accuracies = []
+                train_batch_accuracies = []
                 for (words_batch,
                      syllable_labels_batch,
                      lengths_batch) in self._get_batches('train'):
@@ -387,22 +394,21 @@ class SyllableParser(object):
                                                                       self.sliced_probs,
                                                                       self.optimizer],
                                                                      feed_dict=feed_dict)
-                    for idx, (k, word_probs, length) in enumerate(zip(nums_of_syllables, probs,
-                                                                      lengths_batch)):
-                        indices = top_k_indices(word_probs[:length], k=k)
-                        pred[idx][indices] = 1
+                    pred = self._get_prediction(pred, nums_of_syllables, probs, lengths_batch)
                     train_accuracy = self._accuracy(syllable_labels_batch,
                                                     pred, lengths_batch)
-                    train_accuracies.append(train_accuracy)
-                    batch_losses.append(batch_loss)
-                    train_losses.append(batch_loss)
+                    train_batch_accuracies.append(train_accuracy)
+                    all_train_accuracies.append(train_accuracy)
+                    train_batch_losses.append(batch_loss)
+                    all_train_losses.append(batch_loss)
                 end = time()
                 epoch_result = ('Epoch {} done. Train loss: {}. '
                                 'Train accuracy: {} Training took {} sec.')
-                print(epoch_result.format(epoch, np.mean(batch_losses),
-                                          np.mean(train_accuracies),
+                print(epoch_result.format(epoch, np.mean(train_batch_losses),
+                                          np.mean(train_batch_accuracies),
                                           end - start))
-                val_losses = []
+                valid_batch_losses = []
+                valid_batch_accuracies = []
                 for (val_words_batch,
                      val_syllable_label_batch,
                      val_lengths_batch) in self._get_batches('val'):
@@ -418,25 +424,19 @@ class SyllableParser(object):
                                                           self.loss],
                                                          feed_dict=feed_dict)
                     # pred[indices[:, 0], indices[:, 1], indices[:, 2]] = 1
-                    for idx, (k, word_probs, length) in enumerate(zip(nums_of_syllables, probs,
-                                                                      val_lengths_batch)):
-                        indices = top_k_indices(word_probs[:length], k=k)
-                        pred[idx][indices] = 1
-                        # if idx % 100 == 0:
-                        #     print(self.decode(val_words_batch[idx][:length]))
-                        #    print(f'\n\tk: {k}\n\tlength: {length}\n\tprobs: {word_probs}\n\tpred:'
-                        #           f' {pred[idx]}\n'
-                        #           f'\tindices:{indices}\n')
-                    val_losses.append(val_loss)
-                    valid_losses.append(val_loss)
+                    pred = self._get_prediction(pred, nums_of_syllables, probs,
+                                                val_lengths_batch)
+                    valid_batch_losses.append(val_loss)
+                    all_valid_losses.append(val_loss)
                     accuracy = self._accuracy(val_syllable_label_batch,
                                               pred, val_lengths_batch)
-                    val_accuracies.append(accuracy)
+                    all_valid_accuracies.append(accuracy)
+                    valid_batch_accuracies.append(accuracy)
                     # pred = pred.reshape((pred.shape[0],
                     #                     pred.shape[1])).astype(np.int32)
-                print('Validation loss: %f' % np.mean(val_losses))
+                print('Validation loss: %f' % np.mean(valid_batch_losses))
 
-                print('Accuracy: %f' % accuracy)
+                print('Accuracy: %f' % np.mean(valid_batch_accuracies))
                 indices = np.random.choice(np.arange(len(val_words_batch)), 3)
                 prediction = self._decode_prediction(val_words_batch[indices],
                                                      pred[indices],
@@ -461,7 +461,7 @@ class SyllableParser(object):
                                                 os.path.join(checkpoints_dir,
                                                              checkpoint_name))
                     print("Saved in " + save_path)
-            return train_accuracies, val_accuracies, train_losses, valid_losses
+            return all_train_accuracies, all_valid_accuracies, all_train_losses, all_valid_losses
 
     def _dump_parameters(self, checkpoints_dir):
         with open(os.path.join(checkpoints_dir, 'params'), 'wb') as params_file:
@@ -546,10 +546,7 @@ class SyllableParser(object):
                                                        self.sliced_probs,
                                                        self.num_syllables],
                                                       feed_dict=feed_dict)
-                    for idx, (k, word_probs, length) in enumerate(zip(nums_of_syllables, probs,
-                                                                      lengths_batch)):
-                        indices = top_k_indices(word_probs[:length], k=k)
-                        pred[idx][indices] = 1
+                    pred = self._get_prediction(pred, nums_of_syllables, probs, lengths_batch)
                     prediction = self._decode_prediction(words_batch, pred,
                                                          lengths_batch)
                     for word, syllables in prediction:
