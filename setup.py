@@ -4,10 +4,10 @@ from setuptools import setup, find_packages
 
 requirements = ["numpy"]
 
-try:
-    __import__('tensorflow')
-except ImportError:
-    requirements.append("tensorflow>=1.0.0")
+#try:
+#    __import__('tensorflow')
+#except ImportError:
+#    requirements.append("tensorflow>=1.0.0")
 
 setup(
     name="syllable_parser",
