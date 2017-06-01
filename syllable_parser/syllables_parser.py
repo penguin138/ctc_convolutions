@@ -305,14 +305,16 @@ class SyllableParser(object):
                 cell_constructor = tf.contrib.rnn.LSTMBlockCell
             else:
                 raise ValueError('Unknown cell type.')
-            rnn_multicell = rnn_cell.MultiRNNCell([cell_constructor(self.hidden_size) for i in range(self.num_layers)])
+            fw_multicell = rnn_cell.MultiRNNCell([cell_constructor(self.hidden_size) for i in range(self.num_layers)])
+            bw_multicell = rnn_cell.MultiRNNCell([cell_constructor(self.hidden_size) for i in range(self.num_layers)])
+
             if self.net_type == 'rnn':
                 self.outputs, _ = dynamic_rnn(rnn_multicell, embedding,
                                               sequence_length=self.seq_lengths,
                                               dtype=tf.float32,
                                               swap_memory=True)
             elif self.net_type == 'brnn':
-                self.outputs, _ = dynamic_brnn(rnn_multicell, rnn_multicell,
+                self.outputs, _ = dynamic_brnn(fw_multicell, bw_multicell,
                                                embedding,
                                                sequence_length=self.seq_lengths,
                                                dtype=tf.float32,
